@@ -1,8 +1,7 @@
-// var $ = require( 'jquery' )
-// var dt = require( 'datatables.net' )( window, $ )
-import * as $ from 'jquery'
-import * as dt from 'datatables.net'
-import * as dtResponsive from 'datatables.net-responsive'
+import $ from 'jquery'
+import 'datatables.net'
+import 'datatables.net-dt'
+import 'datatables.net-responsive'
 import { zoomToRegion } from './map.js'
 
 import {
@@ -103,6 +102,7 @@ function init(data, elementId) {
         data: COLLABORATION_COL,
         title: 'COLLABORATION OPPORTUNITIES:',
         className: 'none',
+        defaultContent: '', // Handle missing field gracefully
       },
     ]
   })

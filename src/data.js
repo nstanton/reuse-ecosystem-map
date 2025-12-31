@@ -1,5 +1,5 @@
-import * as Papa from 'papaparse'
-import Airtable from "airtable";
+import Papa from 'papaparse'
+import Airtable from "airtable"
 import * as Map from './map.js'
 import * as Table from './table.js'
 
@@ -13,8 +13,16 @@ import {
   C_RECORD_ID_COL,
 } from './data_constants.js'
 
-const databaseId = 'app2Ufltjsi6qQF2b';
-const airtableApiKey = 'pataXt3cv72CjV3Me.03efa389a17bdfdc55a726d4b6a2bffec8cc8be5c2c5ac8836c3dd5420e11b5a';
+const databaseId = import.meta.env.VITE_AIRTABLE_BASE_ID;
+const airtableApiKey = import.meta.env.VITE_AIRTABLE_API_KEY;
+
+if (!airtableApiKey) {
+  throw new Error('VITE_AIRTABLE_API_KEY is required. Please set it in your .env.local file.');
+}
+
+if (!databaseId) {
+  throw new Error('VITE_AIRTABLE_BASE_ID is required. Please set it in your .env.local file.');
+}
 const base = new Airtable({apiKey: airtableApiKey}).base(databaseId);
 
 const publicSpreadsheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSZ_aRgmKOVqj1Ch4zy8zzjkQREuYo0xXzPlJUKv4-7ULfWNNQdJbOFJgVFayS4zbT7vvkIaJ5JZaBa/pub?output=csv'
@@ -46,8 +54,31 @@ const getAirtableRecords = async ({
           fetchNextPage();
         },
         err => {
-          if (err) reject(err);
-          resolve(allRecords);
+          // If error is about unknown fields, try fetching all fields instead
+          if (err && err.message && err.message.includes('UNKNOWN_FIELD_NAME')) {
+            console.warn('Some optional fields not found in Airtable, fetching all available fields instead');
+            // Retry without field specification to get all available fields
+            base(name).select({
+              maxRecords: 500,
+              view: view,
+            })
+              .eachPage(
+                (records, fetchNextPage) => {
+                  allRecords = [
+                    ...allRecords,
+                    ...records.map(r => r.fields)
+                  ];
+                  fetchNextPage();
+                },
+                retryErr => {
+                  if (retryErr) reject(retryErr);
+                  resolve(allRecords);
+                }
+              );
+          } else {
+            if (err) reject(err);
+            resolve(allRecords);
+          }
         }
       );
   });
