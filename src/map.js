@@ -1,4 +1,5 @@
-import * as L from 'leaflet'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 
 import {
   LON_COL,
@@ -15,7 +16,18 @@ import {
   COLOR_COL,
 } from './data_constants.js'
 
-const MAPBOX_LINK = 'https://api.mapbox.com/styles/v1/bpemaps/ckyt7sb63000d14qmztb6jew3/tiles/256/{z}/{x}/{y}@2x?access_token=pk.eyJ1IjoiYnBlbWFwcyIsImEiOiJja3l0N25wMzkxN2F1MnVzajJ4N2tlNG9sIn0.hHHFVHuiYWIuSFf7osJfaA'
+const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+const MAPBOX_STYLE_ID = import.meta.env.VITE_MAPBOX_STYLE_ID;
+
+if (!MAPBOX_ACCESS_TOKEN) {
+  throw new Error('VITE_MAPBOX_ACCESS_TOKEN is required. Please set it in your .env.local file.');
+}
+
+if (!MAPBOX_STYLE_ID) {
+  throw new Error('VITE_MAPBOX_STYLE_ID is required. Please set it in your .env.local file.');
+}
+
+const MAPBOX_LINK = `https://api.mapbox.com/styles/v1/bpemaps/${MAPBOX_STYLE_ID}/tiles/256/{z}/{x}/{y}@2x?access_token=${MAPBOX_ACCESS_TOKEN}`;
 
 const INITIAL_COORDS = [37.76496739271615, -122.39985495803376]
 const INITIAL_ZOOM = 5
@@ -30,13 +42,13 @@ export {
 let geoJSON
 let map
 
-function init(data) {
+function init(data, colorsData) {
   geoJSON = buildGeoJSON(data)
   console.log(data)
   console.log(geoJSON)
   console.log(data.length, 'rows received')
   console.log(geoJSON.features.length, 'rows parsed')
-  loadMap(geoJSON)
+  loadMap(geoJSON, colorsData)
   setTimeout(function(){
     document.getElementById('spinner').style.display = 'none'
   }, 350)
@@ -135,7 +147,7 @@ function loadMap(geoJSON) {
             <tr><td><strong>Website</strong></td><td><a href="${display(prop[WEBSITE_COL])}" target="_blank">${display(prop[WEBSITE_COL])}</a></td></tr>
           </tbody>
         </table>
-        <p class="popup-p"><strong>Collaboration Opportunities: </strong>${display(prop[COLLABORATION_COL])}</p>
+        ${prop[COLLABORATION_COL] ? `<p class="popup-p"><strong>Collaboration Opportunities: </strong>${display(prop[COLLABORATION_COL])}</p>` : ''}
       </div>
       `, {
         maxWidth : isMobile ? window.innerWidth * 0.75 : 450

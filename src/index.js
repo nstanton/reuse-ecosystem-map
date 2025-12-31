@@ -1,7 +1,7 @@
 import * as Data from './data.js'
 import * as Map from './map.js'
 import * as Table from './table.js'
-import style from './style/main.scss'
+import './style/main.scss'
 
 const app = document.querySelector('#app')
 const parentUrl = (window.location != window.parent.location) ? document.referrer : document.location.href

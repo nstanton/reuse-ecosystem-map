@@ -12,7 +12,8 @@ export const WEBSITE_COL = "Website"
 export const COLLABORATION_COL = "Collaboration Opportunities"
 export const COLOR_COL = "Colors (HEX) (from Primary Role copy)"
 
-export const ALL_FIELDS = [
+// Core required fields
+export const REQUIRED_FIELDS = [
   LAT_COL,
   LON_COL,
   ENTITY_COL,
@@ -24,13 +25,23 @@ export const ALL_FIELDS = [
   EMAIL_COL,
   PHONE_COL,
   WEBSITE_COL,
-  COLLABORATION_COL,
   COLOR_COL,
+]
+
+// Optional fields that may not exist in all Airtable bases
+export const OPTIONAL_FIELDS = [
+  COLLABORATION_COL,
+]
+
+// All fields (required + optional)
+export const ALL_FIELDS = [
+  ...REQUIRED_FIELDS,
+  ...OPTIONAL_FIELDS,
 ]
 
 export const BASE_TABLE_CONFIG = {
   name: 'data',
-  fields: ALL_FIELDS,
+  fields: REQUIRED_FIELDS, // Only request required fields to avoid errors with missing optional fields
   view: 'View for map'
 }
 
