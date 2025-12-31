@@ -68,15 +68,44 @@ a {
   margin-bottom: 0.75rem;
 }
 
+.map-legend-buttons-row {
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+  
+  .map-legend-icon {
+    margin: 0;
+  }
+}
+
+.map-legend-checkbox {
+  margin-right: 0.5rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 .map-legend-color {
   width: 1rem;
   height: 1rem;
   margin-right: 0.5rem;
   border-radius: 100%;
+  flex-shrink: 0;
 }
 
 .map-legend-content {
   display: none !important;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+  
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+  
+  &.map-legend-selected {
+    background-color: white;
+  }
 }
 
 .map-legend-icon {
