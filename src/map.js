@@ -37,10 +37,13 @@ export {
   init,
   mapLegend,
   zoomToRegion,
+  filterMarkersByCategories,
 }
 
 let geoJSON
 let map
+let pointsLayers
+let categoryToMarkers = new Map() // Map of category name -> array of markers
 
 function init(data, colorsData) {
   geoJSON = buildGeoJSON(data)
@@ -163,8 +166,10 @@ function loadMap(geoJSON) {
       })
   }
 
-  const pointsLayers = L.geoJSON(geoJSON, {
-
+  // Reset category mapping
+  categoryToMarkers.clear()
+  
+  pointsLayers = L.geoJSON(geoJSON, {
     pointToLayer: function(feature, latlng) {
       return L.circleMarker(latlng, {
         radius: 5,
@@ -175,7 +180,29 @@ function loadMap(geoJSON) {
         fillOpacity: 0.9,
       })
     },
-    onEachFeature: popup
+    onEachFeature: function(feature, layer) {
+      popup(feature, layer)
+      
+      // Store marker reference by category
+      // ROLE_COL can be an array, so we need to handle that
+      const roles = feature.properties[ROLE_COL]
+      if (Array.isArray(roles)) {
+        roles.forEach(role => {
+          if (role) {
+            if (!categoryToMarkers.has(role)) {
+              categoryToMarkers.set(role, [])
+            }
+            categoryToMarkers.get(role).push(layer)
+          }
+        })
+      } else if (roles) {
+        // Handle single role as string
+        if (!categoryToMarkers.has(roles)) {
+          categoryToMarkers.set(roles, [])
+        }
+        categoryToMarkers.get(roles).push(layer)
+      }
+    }
   }).addTo(map)
 
   map.fitBounds(pointsLayers.getBounds())
@@ -212,17 +239,68 @@ function mapLegend(colors) {
     <div id="map-legend-show" class="map-legend-row map-legend-icon flex ${isMobile ? 'visible' : 'invisible'}">
       <span>See Legend</span>
     </div>
-    <div id="map-legend-hide" class="map-legend-row map-legend-icon flex ${isMobile ? 'invisible' : 'visible'}">
-      <span>Hide Legend</span>
+    <div class="map-legend-buttons-row flex">
+      <div id="map-legend-hide" class="map-legend-icon flex ${isMobile ? 'invisible' : 'visible'}">
+        <span>Hide Legend</span>
+      </div>
+      <div id="map-legend-show-none" class="map-legend-icon flex invisible">
+        <span>Show None</span>
+      </div>
+      <div id="map-legend-show-all" class="map-legend-icon flex invisible">
+        <span>Show All</span>
+      </div>
     </div>
   `]
   for (const color of colors) {
+    const categoryName = color[0]
     colorsHTML.push(`
-      <div class="map-legend-row map-legend-content flex ${isMobile ? 'invisible' : 'visible'}">
+      <div class="map-legend-row map-legend-content flex ${isMobile ? 'invisible' : 'visible'}" 
+           data-category="${categoryName.replace(/"/g, '&quot;')}" 
+           role="button" 
+           tabindex="0">
+        <input type="checkbox" class="map-legend-checkbox" checked aria-label="Filter ${categoryName}">
         <div class="map-legend-color" style="background: ${color[1]}"></div>
-        <span>${color[0]}</span>
+        <span>${categoryName}</span>
       </div>
     `)
   }
   return `<div class="map-legend flex flex-column">${colorsHTML.join('\n')}</div>`
+}
+
+function filterMarkersByCategories(selectedCategories) {
+  // Create a Set for faster lookup
+  const selectedSet = new Set(selectedCategories)
+  
+  // If no categories selected, hide all markers
+  if (selectedSet.size === 0) {
+    categoryToMarkers.forEach((markers) => {
+      markers.forEach(marker => {
+        marker.setStyle({ opacity: 0, fillOpacity: 0 })
+      })
+    })
+    return
+  }
+  
+  // Track which markers should be visible (markers can have multiple roles)
+  const markersToShow = new Set()
+  
+  // First pass: identify which markers should be visible
+  categoryToMarkers.forEach((markers, category) => {
+    if (selectedSet.has(category)) {
+      markers.forEach(marker => {
+        markersToShow.add(marker)
+      })
+    }
+  })
+  
+  // Second pass: show/hide all markers
+  categoryToMarkers.forEach((markers) => {
+    markers.forEach(marker => {
+      if (markersToShow.has(marker)) {
+        marker.setStyle({ opacity: 1, fillOpacity: 0.9 })
+      } else {
+        marker.setStyle({ opacity: 0, fillOpacity: 0 })
+      }
+    })
+  })
 }
