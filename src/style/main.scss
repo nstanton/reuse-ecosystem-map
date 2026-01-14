@@ -130,6 +130,19 @@ a {
   flex-direction: column;
 }
 
+// Override Leaflet's default popup width constraints
+.leaflet-popup-content-wrapper {
+  max-width: 600px !important;
+  width: auto !important;
+  min-width: 400px;
+}
+
+.leaflet-popup-content {
+  width: auto !important;
+  min-width: 400px;
+  margin: 13px 19px;
+}
+
 .popup {
 
 }

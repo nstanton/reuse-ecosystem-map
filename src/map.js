@@ -153,7 +153,7 @@ function loadMap(geoJSON) {
         ${prop[COLLABORATION_COL] ? `<p class="popup-p"><strong>Collaboration Opportunities: </strong>${display(prop[COLLABORATION_COL])}</p>` : ''}
       </div>
       `, {
-        maxWidth : isMobile ? window.innerWidth * 0.75 : 450
+        maxWidth : isMobile ? window.innerWidth * 0.75 : 600
       })
 
     layer.bindTooltip(`
