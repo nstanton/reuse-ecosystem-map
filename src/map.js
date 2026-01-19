@@ -59,7 +59,7 @@ function init(data, colorsData) {
 
 function getFeatureColor(colorCol) {
   const fallbackColor = '#333'
-  if (!colorCol.length) { return fallbackColor }
+  if (!colorCol || !colorCol.length) { return fallbackColor }
   return colorCol[0]
 }
 
