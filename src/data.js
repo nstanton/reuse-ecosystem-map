@@ -41,7 +41,6 @@ const getAirtableRecords = async ({
     let allRecords = [];
 
     base(name).select({
-      maxRecords: 500,
       view: view,
       fields: fields,
      })
@@ -59,7 +58,6 @@ const getAirtableRecords = async ({
             console.warn('Some optional fields not found in Airtable, fetching all available fields instead');
             // Retry without field specification to get all available fields
             base(name).select({
-              maxRecords: 500,
               view: view,
             })
               .eachPage(
@@ -91,8 +89,8 @@ const getAirtableData = async () => {
   // join main data to colors to find role names
   mainData = mainData.map(d => {
     const obj = {...d}
-    obj[ROLE_COL] = obj[ROLE_COL].map(r => colorsData.find(c => c?.[C_RECORD_ID_COL] === r)?.[C_ROLE_COL])
-    obj[SECONDARY_ROLE_COL] = obj[ROLE_COL].map(r => colorsData.find(c => c?.[C_RECORD_ID_COL] === r)?.[C_ROLE_COL])
+    obj[ROLE_COL] = (obj[ROLE_COL] || []).map(r => colorsData.find(c => c?.[C_RECORD_ID_COL] === r)?.[C_ROLE_COL])
+    obj[SECONDARY_ROLE_COL] = (obj[SECONDARY_ROLE_COL] || []).map(r => colorsData.find(c => c?.[C_RECORD_ID_COL] === r)?.[C_ROLE_COL])
     return obj
   })
 
