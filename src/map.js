@@ -114,7 +114,7 @@ function loadMap(geoJSON) {
   map = L.map('map', {
     center: INITIAL_COORDS,
     zoom: INITIAL_ZOOM,
-    scrollWheelZoom: false,
+    scrollWheelZoom: true,
     zoomControl: false,
   })
 
