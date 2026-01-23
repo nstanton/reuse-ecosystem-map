@@ -29,6 +29,8 @@ const publicSpreadsheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS
 
 export {
   getAirtableData,
+  getAirtableDataStreaming,
+  getColorsData,
   getSpreadsheetData,
 }
 
@@ -96,6 +98,55 @@ const getAirtableData = async () => {
 
   colorsData = colorsData.map(d => [d[C_ROLE_COL], d[C_COLOR_COL]])
   return [mainData, colorsData]
+};
+
+// Get colors data first (needed for legend and color mapping)
+const getColorsData = async () => {
+  let colorsData = await getAirtableRecords(COLORS_TABLE_CONFIG)
+  const colorsLookup = colorsData // Keep full data for lookups
+  const colorsForLegend = colorsData.map(d => [d[C_ROLE_COL], d[C_COLOR_COL]])
+  return { colorsLookup, colorsForLegend }
+};
+
+// Helper to transform a page of main data with colors lookup
+const transformMainData = (pageData, colorsLookup) => {
+  return pageData.map(d => {
+    const obj = {...d}
+    obj[ROLE_COL] = (obj[ROLE_COL] || []).map(r => colorsLookup.find(c => c?.[C_RECORD_ID_COL] === r)?.[C_ROLE_COL])
+    obj[SECONDARY_ROLE_COL] = (obj[SECONDARY_ROLE_COL] || []).map(r => colorsLookup.find(c => c?.[C_RECORD_ID_COL] === r)?.[C_ROLE_COL])
+    return obj
+  })
+};
+
+// Stream main data page by page, calling onPage callback for each batch
+const getAirtableDataStreaming = async (colorsLookup, onPage) => {
+  return new Promise((resolve, reject) => {
+    let totalRecords = 0;
+    
+    base(BASE_TABLE_CONFIG.name).select({
+      view: BASE_TABLE_CONFIG.view,
+      fields: BASE_TABLE_CONFIG.fields,
+    })
+      .eachPage(
+        (records, fetchNextPage) => {
+          const pageData = records.map(r => r.fields);
+          const transformedData = transformMainData(pageData, colorsLookup);
+          totalRecords += transformedData.length;
+          console.log(`Loaded page with ${transformedData.length} records (${totalRecords} total)`);
+          onPage(transformedData);
+          fetchNextPage();
+        },
+        err => {
+          if (err) {
+            console.error('Error fetching Airtable data:', err);
+            reject(err);
+          } else {
+            console.log(`Finished loading all ${totalRecords} records`);
+            resolve(totalRecords);
+          }
+        }
+      );
+  });
 };
 
 function getSpreadsheetData() {
