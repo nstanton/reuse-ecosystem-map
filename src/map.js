@@ -35,6 +35,9 @@ const isMobile = window.innerHeight >= window.innerWidth
 
 export {
   init,
+  initMap,
+  addMarkers,
+  setSelectedCategories,
   mapLegend,
   zoomToRegion,
   filterMarkersByCategories,
@@ -44,6 +47,9 @@ let geoJSON
 let map
 let pointsLayers
 let categoryToMarkers = new Map() // Map of category name -> array of markers
+let isMapInitialized = false
+let hasInitialBounds = false
+let selectedCategories = null // Will be set from outside to track filtering state
 
 function init(data, colorsData) {
   geoJSON = buildGeoJSON(data)
@@ -55,6 +61,159 @@ function init(data, colorsData) {
   setTimeout(function(){
     document.getElementById('spinner').style.display = 'none'
   }, 350)
+}
+
+// Initialize empty map (call this first for progressive loading)
+function initMap() {
+  if (isMapInitialized) return;
+  
+  map = L.map('map', {
+    center: INITIAL_COORDS,
+    zoom: INITIAL_ZOOM,
+    scrollWheelZoom: true,
+    zoomControl: false,
+  })
+
+  L.control.zoom({
+    position: 'bottomleft'
+  }).addTo(map);
+
+  L.tileLayer(MAPBOX_LINK, {
+    maxZoom: 18,
+    attribution: 'Map data &copy <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, ' +
+      '<a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, ' +
+      'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+    id: 'mapbox.light'
+  }).addTo(map)
+
+  // Initialize the points layer group
+  pointsLayers = L.layerGroup().addTo(map)
+  
+  isMapInitialized = true
+  console.log('Map initialized')
+}
+
+// Set the selected categories reference for filtering new markers
+function setSelectedCategories(categories) {
+  selectedCategories = categories
+}
+
+// Add markers progressively (call this for each batch of data)
+function addMarkers(data, onComplete) {
+  if (!isMapInitialized) {
+    console.error('Map not initialized. Call initMap() first.')
+    return
+  }
+
+  const newGeoJSON = buildGeoJSON(data)
+  console.log(`Adding ${newGeoJSON.features.length} markers`)
+
+  // Store features in main geoJSON for reference
+  if (!geoJSON) {
+    geoJSON = { type: "FeatureCollection", features: [] }
+  }
+  geoJSON.features = [...geoJSON.features, ...newGeoJSON.features]
+
+  // Add each feature as a marker
+  newGeoJSON.features.forEach(feature => {
+    const latlng = L.latLng(
+      feature.geometry.coordinates[1],
+      feature.geometry.coordinates[0]
+    )
+    
+    const marker = L.circleMarker(latlng, {
+      radius: 5,
+      fillColor: getFeatureColor(feature.properties[COLOR_COL]),
+      color: "#fff",
+      weight: 1.2,
+      opacity: 1,
+      fillOpacity: 0.9,
+    })
+
+    // Add popup and tooltip
+    addPopupAndTooltip(feature, marker)
+    
+    // Store marker reference by category
+    const roles = feature.properties[ROLE_COL]
+    if (Array.isArray(roles)) {
+      roles.forEach(role => {
+        if (role) {
+          if (!categoryToMarkers.has(role)) {
+            categoryToMarkers.set(role, [])
+          }
+          categoryToMarkers.get(role).push(marker)
+        }
+      })
+    } else if (roles) {
+      if (!categoryToMarkers.has(roles)) {
+        categoryToMarkers.set(roles, [])
+      }
+      categoryToMarkers.get(roles).push(marker)
+    }
+
+    // Apply current filter state to new marker
+    if (selectedCategories !== null) {
+      const markerRoles = Array.isArray(roles) ? roles : (roles ? [roles] : [])
+      const isVisible = markerRoles.some(role => selectedCategories.has(role))
+      if (!isVisible) {
+        marker.setStyle({ opacity: 0, fillOpacity: 0 })
+      }
+    }
+
+    pointsLayers.addLayer(marker)
+  })
+
+  // Fit bounds on first batch of data
+  if (!hasInitialBounds && newGeoJSON.features.length > 0) {
+    const bounds = L.geoJSON(newGeoJSON).getBounds()
+    map.fitBounds(bounds)
+    hasInitialBounds = true
+  }
+
+  // Hide spinner after first batch
+  const spinner = document.getElementById('spinner')
+  if (spinner) {
+    spinner.style.display = 'none'
+  }
+
+  if (onComplete) onComplete()
+}
+
+// Helper function for popup and tooltip (extracted from loadMap)
+function addPopupAndTooltip(feature, layer) {
+  let prop = feature.properties
+
+  const display = (text) => { return text ? text : '' }
+
+  layer.bindPopup(`
+    <div class="popup">
+      <h2>${prop[ENTITY_COL]}</h2>
+      ${prop[LOCATION_COL] ? `<h4>${prop[LOCATION_COL]}</h4>` : ''}
+      <hr/>
+      <table class="popup-table">
+        <tbody>
+          <tr><td><strong>Role(s)</strong></td><td>${display(prop[ROLE_COL])}</td></tr>
+          <tr><td><strong>Address</strong></td><td>${display(prop[ADDRESS_COL])}</td></tr>
+          <tr><td><strong>Contact</strong></td><td>${display(prop[CONTACT_COL])}</td></tr>
+          <tr><td><strong>Email</strong></td><td><a href="mailto:${display(prop[EMAIL_COL])}">${display(prop[EMAIL_COL])}</a></td></tr>
+          <tr><td><strong>Phone</strong></td><td><a href="tel:${display(prop[PHONE_COL])}">${display(prop[PHONE_COL])}</a></td></tr>
+          <tr><td><strong>Website</strong></td><td><a href="${display(prop[WEBSITE_COL])}" target="_blank">${display(prop[WEBSITE_COL])}</a></td></tr>
+        </tbody>
+      </table>
+      ${prop[COLLABORATION_COL] ? `<p class="popup-p"><strong>Collaboration Opportunities: </strong>${display(prop[COLLABORATION_COL])}</p>` : ''}
+    </div>
+    `, {
+      maxWidth : isMobile ? window.innerWidth * 0.75 : 600
+    })
+
+  layer.bindTooltip(`
+    <div class="tooltip">
+      <strong style="font-size: 1.25em;">${prop[ENTITY_COL]}</strong>
+      ${prop[LOCATION_COL] ? `<br /><span>${prop[LOCATION_COL]}</span>` : ''}
+    </div>
+    `, {
+      maxWidth : isMobile ? window.innerWidth * 0.75 : 250
+    })
 }
 
 function getFeatureColor(colorCol) {

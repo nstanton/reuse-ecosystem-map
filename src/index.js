@@ -16,17 +16,16 @@ app.innerHTML = `
 `
 
 const init = async () => {
-  // Data.getSpreadsheetData()
-  let data = await Data.getAirtableData()
-  let airtableData = data[0]
-  const colorsData = data[1]
+  // Step 1: Get colors data first (small, fast)
+  const { colorsLookup, colorsForLegend } = await Data.getColorsData()
+  console.log('Colors loaded:', colorsForLegend);
 
-  console.log(airtableData, colorsData);
+  // Step 2: Initialize empty map immediately
+  Map.initMap();
 
-  Map.init(airtableData, colorsData);
-
+  // Step 3: Set up legend immediately (before data loads)
   const mapLegend = document.querySelector('#mapLegend')
-  mapLegend.innerHTML = Map.mapLegend(colorsData)
+  mapLegend.innerHTML = Map.mapLegend(colorsForLegend)
 
   const mapLegendShow = document.querySelector('#map-legend-show')
   const mapLegendHide = document.querySelector('#map-legend-hide')
@@ -40,8 +39,11 @@ const init = async () => {
   }
 
   // Track selected categories - default to all selected
-  const selectedCategories = new Set(colorsData.map(color => color[0]))
-  const allCategories = new Set(colorsData.map(color => color[0]))
+  const selectedCategories = new Set(colorsForLegend.map(color => color[0]))
+  const allCategories = new Set(colorsForLegend.map(color => color[0]))
+  
+  // Share selected categories with Map module so new markers respect filter state
+  Map.setSelectedCategories(selectedCategories)
 
   // Function to update filtering
   function updateFiltering() {
@@ -120,8 +122,16 @@ const init = async () => {
     })
   })
 
-  // Initial filtering (all categories selected)
-  updateFiltering()
+  // Step 4: Start streaming main data - markers will appear as pages load
+  Data.getAirtableDataStreaming(colorsLookup, (pageData) => {
+    Map.addMarkers(pageData)
+  }).then(() => {
+    console.log('All data loaded')
+    // Apply initial filtering after all data is loaded
+    updateFiltering()
+  }).catch(err => {
+    console.error('Error loading data:', err)
+  })
 
   // "Show None" button handler
   if (mapLegendShowNone) {
