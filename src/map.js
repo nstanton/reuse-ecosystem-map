@@ -47,9 +47,11 @@ let geoJSON
 let map
 let pointsLayers
 let categoryToMarkers = new Map() // Map of category name -> array of markers
+let activeCategories = new Set()
+let markerVisibleCounts = new WeakMap()
+let isFilteringEnabled = false
 let isMapInitialized = false
 let hasInitialBounds = false
-let selectedCategories = null // Will be set from outside to track filtering state
 
 function init(data, colorsData) {
   geoJSON = buildGeoJSON(data)
@@ -72,6 +74,7 @@ function initMap() {
     zoom: INITIAL_ZOOM,
     scrollWheelZoom: true,
     zoomControl: false,
+    preferCanvas: true,
   })
 
   L.control.zoom({
@@ -95,7 +98,18 @@ function initMap() {
 
 // Set the selected categories reference for filtering new markers
 function setSelectedCategories(categories) {
-  selectedCategories = categories
+  if (categories instanceof Set) {
+    activeCategories = new Set(categories)
+    isFilteringEnabled = true
+    return
+  }
+  if (!categories) {
+    isFilteringEnabled = false
+    activeCategories = new Set()
+    return
+  }
+  activeCategories = new Set(categories)
+  isFilteringEnabled = true
 }
 
 // Add markers progressively (call this for each batch of data)
@@ -114,55 +128,6 @@ function addMarkers(data, onComplete) {
   }
   geoJSON.features = [...geoJSON.features, ...newGeoJSON.features]
 
-  // Add each feature as a marker
-  newGeoJSON.features.forEach(feature => {
-    const latlng = L.latLng(
-      feature.geometry.coordinates[1],
-      feature.geometry.coordinates[0]
-    )
-    
-    const marker = L.circleMarker(latlng, {
-      radius: 5,
-      fillColor: getFeatureColor(feature.properties[COLOR_COL]),
-      color: "#fff",
-      weight: 1.2,
-      opacity: 1,
-      fillOpacity: 0.9,
-    })
-
-    // Add popup and tooltip
-    addPopupAndTooltip(feature, marker)
-    
-    // Store marker reference by category
-    const roles = feature.properties[ROLE_COL]
-    if (Array.isArray(roles)) {
-      roles.forEach(role => {
-        if (role) {
-          if (!categoryToMarkers.has(role)) {
-            categoryToMarkers.set(role, [])
-          }
-          categoryToMarkers.get(role).push(marker)
-        }
-      })
-    } else if (roles) {
-      if (!categoryToMarkers.has(roles)) {
-        categoryToMarkers.set(roles, [])
-      }
-      categoryToMarkers.get(roles).push(marker)
-    }
-
-    // Apply current filter state to new marker
-    if (selectedCategories !== null) {
-      const markerRoles = Array.isArray(roles) ? roles : (roles ? [roles] : [])
-      const isVisible = markerRoles.some(role => selectedCategories.has(role))
-      if (!isVisible) {
-        marker.setStyle({ opacity: 0, fillOpacity: 0 })
-      }
-    }
-
-    pointsLayers.addLayer(marker)
-  })
-
   // Fit bounds on first batch of data
   if (!hasInitialBounds && newGeoJSON.features.length > 0) {
     const bounds = L.geoJSON(newGeoJSON).getBounds()
@@ -170,22 +135,73 @@ function addMarkers(data, onComplete) {
     hasInitialBounds = true
   }
 
-  // Hide spinner after first batch
-  const spinner = document.getElementById('spinner')
-  if (spinner) {
-    spinner.style.display = 'none'
+  const features = newGeoJSON.features
+  const batchSize = 18
+  const frameBudgetMs = 4
+  let index = 0
+
+  function addBatch() {
+    const startTime = window.performance && window.performance.now
+      ? window.performance.now()
+      : Date.now()
+    const end = Math.min(index + batchSize, features.length)
+    for (; index < end; index += 1) {
+      const feature = features[index]
+      const latlng = L.latLng(
+        feature.geometry.coordinates[1],
+        feature.geometry.coordinates[0]
+      )
+      
+      const marker = L.circleMarker(latlng, {
+        radius: 5,
+        fillColor: getFeatureColor(feature.properties[COLOR_COL]),
+        color: "#fff",
+        weight: 1.2,
+        opacity: 1,
+        fillOpacity: 0.9,
+      })
+
+      // Bind popup/tooltip only when needed
+      bindPopupAndTooltipOnDemand(feature, marker)
+      
+      const roles = normalizeRoles(feature.properties[ROLE_COL])
+      marker.__roles = roles
+      registerMarkerForCategories(marker, roles)
+      setInitialMarkerVisibility(marker, roles)
+
+      const now = window.performance && window.performance.now
+        ? window.performance.now()
+        : Date.now()
+      if (now - startTime >= frameBudgetMs) {
+        break
+      }
+    }
+
+    if (index < features.length) {
+      window.requestAnimationFrame(addBatch)
+      return
+    }
+
+    // Hide spinner after first batch
+    const spinner = document.getElementById('spinner')
+    if (spinner) {
+      spinner.style.display = 'none'
+    }
+
+    if (onComplete) onComplete()
   }
 
-  if (onComplete) onComplete()
+  window.requestAnimationFrame(addBatch)
+
 }
 
 // Helper function for popup and tooltip (extracted from loadMap)
-function addPopupAndTooltip(feature, layer) {
+function bindPopupAndTooltipOnDemand(feature, layer) {
   let prop = feature.properties
 
   const display = (text) => { return text ? text : '' }
 
-  layer.bindPopup(`
+  const popupHtml = () => `
     <div class="popup">
       <h2>${prop[ENTITY_COL]}</h2>
       ${prop[LOCATION_COL] ? `<h4>${prop[LOCATION_COL]}</h4>` : ''}
@@ -202,18 +218,32 @@ function addPopupAndTooltip(feature, layer) {
       </table>
       ${prop[COLLABORATION_COL] ? `<p class="popup-p"><strong>Collaboration Opportunities: </strong>${display(prop[COLLABORATION_COL])}</p>` : ''}
     </div>
-    `, {
-      maxWidth : isMobile ? window.innerWidth * 0.75 : 600
-    })
+    `
 
-  layer.bindTooltip(`
+  const tooltipHtml = () => `
     <div class="tooltip">
       <strong style="font-size: 1.25em;">${prop[ENTITY_COL]}</strong>
       ${prop[LOCATION_COL] ? `<br /><span>${prop[LOCATION_COL]}</span>` : ''}
     </div>
-    `, {
-      maxWidth : isMobile ? window.innerWidth * 0.75 : 250
-    })
+    `
+
+  layer.on('click', () => {
+    if (!layer.getPopup()) {
+      layer.bindPopup(popupHtml(), {
+        maxWidth : isMobile ? window.innerWidth * 0.75 : 600
+      })
+    }
+    layer.openPopup()
+  })
+
+  layer.on('mouseover', () => {
+    if (!layer.getTooltip()) {
+      layer.bindTooltip(tooltipHtml(), {
+        maxWidth : isMobile ? window.innerWidth * 0.75 : 250
+      })
+    }
+    layer.openTooltip()
+  })
 }
 
 function getFeatureColor(colorCol) {
@@ -275,6 +305,7 @@ function loadMap(geoJSON) {
     zoom: INITIAL_ZOOM,
     scrollWheelZoom: true,
     zoomControl: false,
+    preferCanvas: true,
   })
 
   L.control.zoom({
@@ -288,42 +319,6 @@ function loadMap(geoJSON) {
       'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
     id: 'mapbox.light'
   }).addTo(map)
-
-  function popup(feature, layer) {
-    let prop = feature.properties
-
-    const display = (text) => { return text ? text : '' }
-
-    layer.bindPopup(`
-      <div class="popup">
-        <h2>${prop[ENTITY_COL]}</h2>
-        ${prop[LOCATION_COL] ? `<h4>${prop[LOCATION_COL]}</h4>` : ''}
-        <hr/>
-        <table class="popup-table">
-          <tbody>
-            <tr><td><strong>Role(s)</strong></td><td>${display(prop[ROLE_COL])}</td></tr>
-            <tr><td><strong>Address</strong></td><td>${display(prop[ADDRESS_COL])}</td></tr>
-            <tr><td><strong>Contact</strong></td><td>${display(prop[CONTACT_COL])}</td></tr>
-            <tr><td><strong>Email</strong></td><td><a href="mailto:${display(prop[EMAIL_COL])}">${display(prop[EMAIL_COL])}</a></td></tr>
-            <tr><td><strong>Phone</strong></td><td><a href="tel:${display(prop[PHONE_COL])}">${display(prop[PHONE_COL])}</a></td></tr>
-            <tr><td><strong>Website</strong></td><td><a href="${display(prop[WEBSITE_COL])}" target="_blank">${display(prop[WEBSITE_COL])}</a></td></tr>
-          </tbody>
-        </table>
-        ${prop[COLLABORATION_COL] ? `<p class="popup-p"><strong>Collaboration Opportunities: </strong>${display(prop[COLLABORATION_COL])}</p>` : ''}
-      </div>
-      `, {
-        maxWidth : isMobile ? window.innerWidth * 0.75 : 600
-      })
-
-    layer.bindTooltip(`
-      <div class="tooltip">
-        <strong style="font-size: 1.25em;">${prop[ENTITY_COL]}</strong>
-        ${prop[LOCATION_COL] ? `<br /><span>${prop[LOCATION_COL]}</span>` : ''}
-      </div>
-      `, {
-        maxWidth : isMobile ? window.innerWidth * 0.75 : 250
-      })
-  }
 
   // Reset category mapping
   categoryToMarkers.clear()
@@ -340,29 +335,20 @@ function loadMap(geoJSON) {
       })
     },
     onEachFeature: function(feature, layer) {
-      popup(feature, layer)
-      
-      // Store marker reference by category
-      // ROLE_COL can be an array, so we need to handle that
-      const roles = feature.properties[ROLE_COL]
-      if (Array.isArray(roles)) {
-        roles.forEach(role => {
-          if (role) {
-            if (!categoryToMarkers.has(role)) {
-              categoryToMarkers.set(role, [])
-            }
-            categoryToMarkers.get(role).push(layer)
-          }
-        })
-      } else if (roles) {
-        // Handle single role as string
-        if (!categoryToMarkers.has(roles)) {
-          categoryToMarkers.set(roles, [])
-        }
-        categoryToMarkers.get(roles).push(layer)
-      }
+      bindPopupAndTooltipOnDemand(feature, layer)
     }
   }).addTo(map)
+
+  const layers = []
+  pointsLayers.eachLayer(layer => layers.push(layer))
+  layers.forEach(layer => {
+    const feature = layer.feature
+    if (!feature || !feature.properties) return
+    const roles = normalizeRoles(feature.properties[ROLE_COL])
+    layer.__roles = roles
+    registerMarkerForCategories(layer, roles)
+    setInitialMarkerVisibility(layer, roles)
+  })
 
   map.fitBounds(pointsLayers.getBounds())
 }
@@ -427,39 +413,124 @@ function mapLegend(colors) {
 }
 
 function filterMarkersByCategories(selectedCategories) {
-  // Create a Set for faster lookup
   const selectedSet = new Set(selectedCategories)
-  
-  // If no categories selected, hide all markers
-  if (selectedSet.size === 0) {
-    categoryToMarkers.forEach((markers) => {
-      markers.forEach(marker => {
-        marker.setStyle({ opacity: 0, fillOpacity: 0 })
-      })
-    })
+
+  if (!isFilteringEnabled) {
+    isFilteringEnabled = true
+    activeCategories = new Set()
+    rebuildVisibilityCounts(selectedSet)
+    activeCategories = selectedSet
     return
   }
-  
-  // Track which markers should be visible (markers can have multiple roles)
-  const markersToShow = new Set()
-  
-  // First pass: identify which markers should be visible
-  categoryToMarkers.forEach((markers, category) => {
-    if (selectedSet.has(category)) {
-      markers.forEach(marker => {
-        markersToShow.add(marker)
-      })
+
+  const addedCategories = []
+  const removedCategories = []
+
+  activeCategories.forEach(category => {
+    if (!selectedSet.has(category)) {
+      removedCategories.push(category)
     }
   })
-  
-  // Second pass: show/hide all markers
-  categoryToMarkers.forEach((markers) => {
+
+  selectedSet.forEach(category => {
+    if (!activeCategories.has(category)) {
+      addedCategories.push(category)
+    }
+  })
+
+  if (addedCategories.length === 0 && removedCategories.length === 0) {
+    return
+  }
+
+  removedCategories.forEach(category => {
+    const markers = categoryToMarkers.get(category)
+    if (!markers) return
     markers.forEach(marker => {
-      if (markersToShow.has(marker)) {
-        marker.setStyle({ opacity: 1, fillOpacity: 0.9 })
-      } else {
-        marker.setStyle({ opacity: 0, fillOpacity: 0 })
-      }
+      decrementMarkerVisibility(marker)
+    })
+  })
+
+  addedCategories.forEach(category => {
+    const markers = categoryToMarkers.get(category)
+    if (!markers) return
+    markers.forEach(marker => {
+      incrementMarkerVisibility(marker)
+    })
+  })
+
+  activeCategories = selectedSet
+}
+
+function normalizeRoles(roles) {
+  if (Array.isArray(roles)) return roles.filter(Boolean)
+  if (roles) return [roles]
+  return []
+}
+
+function registerMarkerForCategories(marker, roles) {
+  roles.forEach(role => {
+    if (!categoryToMarkers.has(role)) {
+      categoryToMarkers.set(role, [])
+    }
+    categoryToMarkers.get(role).push(marker)
+  })
+}
+
+function setInitialMarkerVisibility(marker, roles) {
+  if (!isFilteringEnabled) {
+    markerVisibleCounts.set(marker, 1)
+    pointsLayers.addLayer(marker)
+    return
+  }
+  let count = 0
+  roles.forEach(role => {
+    if (activeCategories.has(role)) {
+      count += 1
+    }
+  })
+  markerVisibleCounts.set(marker, count)
+  if (count > 0) {
+    pointsLayers.addLayer(marker)
+  } else {
+    pointsLayers.removeLayer(marker)
+  }
+}
+
+function incrementMarkerVisibility(marker) {
+  const currentCount = markerVisibleCounts.get(marker) || 0
+  const nextCount = currentCount + 1
+  markerVisibleCounts.set(marker, nextCount)
+  if (nextCount === 1) {
+    pointsLayers.addLayer(marker)
+  }
+}
+
+function decrementMarkerVisibility(marker) {
+  const currentCount = markerVisibleCounts.get(marker) || 0
+  if (currentCount === 0) return
+  const nextCount = currentCount - 1
+  markerVisibleCounts.set(marker, nextCount)
+  if (nextCount === 0) {
+    pointsLayers.removeLayer(marker)
+  }
+}
+
+function rebuildVisibilityCounts(selectedSet) {
+  pointsLayers.clearLayers()
+  const allMarkers = new Set()
+  categoryToMarkers.forEach(markers => {
+    markers.forEach(marker => {
+      allMarkers.add(marker)
+    })
+  })
+  allMarkers.forEach(marker => {
+    markerVisibleCounts.set(marker, 0)
+  })
+  selectedSet.forEach(category => {
+    const markers = categoryToMarkers.get(category)
+    if (!markers) return
+    markers.forEach(marker => {
+      incrementMarkerVisibility(marker)
     })
   })
 }

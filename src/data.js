@@ -1,6 +1,6 @@
 import Papa from 'papaparse'
 import Airtable from "airtable"
-import * as Map from './map.js'
+import * as MapModule from './map.js'
 import * as Table from './table.js'
 
 import {
@@ -87,12 +87,13 @@ const getAirtableRecords = async ({
 const getAirtableData = async () => {
   let mainData = await getAirtableRecords(BASE_TABLE_CONFIG)
   let colorsData = await getAirtableRecords(COLORS_TABLE_CONFIG)
+  const roleLookup = buildRoleLookup(colorsData)
 
   // join main data to colors to find role names
   mainData = mainData.map(d => {
     const obj = {...d}
-    obj[ROLE_COL] = (obj[ROLE_COL] || []).map(r => colorsData.find(c => c?.[C_RECORD_ID_COL] === r)?.[C_ROLE_COL])
-    obj[SECONDARY_ROLE_COL] = (obj[SECONDARY_ROLE_COL] || []).map(r => colorsData.find(c => c?.[C_RECORD_ID_COL] === r)?.[C_ROLE_COL])
+    obj[ROLE_COL] = (obj[ROLE_COL] || []).map(r => roleLookup.get(r))
+    obj[SECONDARY_ROLE_COL] = (obj[SECONDARY_ROLE_COL] || []).map(r => roleLookup.get(r))
     return obj
   })
 
@@ -109,11 +110,11 @@ const getColorsData = async () => {
 };
 
 // Helper to transform a page of main data with colors lookup
-const transformMainData = (pageData, colorsLookup) => {
+const transformMainData = (pageData, roleLookup) => {
   return pageData.map(d => {
     const obj = {...d}
-    obj[ROLE_COL] = (obj[ROLE_COL] || []).map(r => colorsLookup.find(c => c?.[C_RECORD_ID_COL] === r)?.[C_ROLE_COL])
-    obj[SECONDARY_ROLE_COL] = (obj[SECONDARY_ROLE_COL] || []).map(r => colorsLookup.find(c => c?.[C_RECORD_ID_COL] === r)?.[C_ROLE_COL])
+    obj[ROLE_COL] = (obj[ROLE_COL] || []).map(r => roleLookup.get(r))
+    obj[SECONDARY_ROLE_COL] = (obj[SECONDARY_ROLE_COL] || []).map(r => roleLookup.get(r))
     return obj
   })
 };
@@ -122,6 +123,7 @@ const transformMainData = (pageData, colorsLookup) => {
 const getAirtableDataStreaming = async (colorsLookup, onPage) => {
   return new Promise((resolve, reject) => {
     let totalRecords = 0;
+    const roleLookup = buildRoleLookup(colorsLookup)
     
     base(BASE_TABLE_CONFIG.name).select({
       view: BASE_TABLE_CONFIG.view,
@@ -130,7 +132,7 @@ const getAirtableDataStreaming = async (colorsLookup, onPage) => {
       .eachPage(
         (records, fetchNextPage) => {
           const pageData = records.map(r => r.fields);
-          const transformedData = transformMainData(pageData, colorsLookup);
+          const transformedData = transformMainData(pageData, roleLookup);
           totalRecords += transformedData.length;
           console.log(`Loaded page with ${transformedData.length} records (${totalRecords} total)`);
           onPage(transformedData);
@@ -149,6 +151,14 @@ const getAirtableDataStreaming = async (colorsLookup, onPage) => {
   });
 };
 
+const buildRoleLookup = (colorsData) => {
+  const roleLookup = new globalThis.Map()
+  colorsData.forEach(color => {
+    roleLookup.set(color?.[C_RECORD_ID_COL], color?.[C_ROLE_COL])
+  })
+  return roleLookup
+}
+
 function getSpreadsheetData() {
   Papa.parse(publicSpreadsheetUrl, {
   download: true,
@@ -160,7 +170,7 @@ function getSpreadsheetData() {
           return obj['STATUS'].trim().toLowerCase() == 'published'
         }
       })
-      Map.init(publishedData)
+      MapModule.init(publishedData)
       Table.init(publishedData, '#table')
     }
   })
