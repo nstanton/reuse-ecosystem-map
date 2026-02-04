@@ -1,4 +1,4 @@
-# BPE - Deconstruction and Reuse Ecosystem Map 1
+# BPE - Deconstruction and Reuse Ecosystem Map
 
 ## Setup
 
