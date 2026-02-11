@@ -403,8 +403,12 @@ function mapLegend(colors) {
            data-category="${categoryName.replace(/"/g, '&quot;')}" 
            role="button" 
            tabindex="0">
-        <input type="checkbox" class="map-legend-checkbox" checked aria-label="Filter ${categoryName}">
-        <div class="map-legend-color" style="background: ${color[1]}"></div>
+        <input
+          type="checkbox"
+          class="map-legend-checkbox"
+          style="--legend-item-color: ${color[1]};"
+          checked
+          aria-label="Filter ${categoryName}">
         <span>${categoryName}</span>
       </div>
     `)
