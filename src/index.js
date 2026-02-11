@@ -10,8 +10,10 @@ app.innerHTML = `
     <span class="sr-only">Loading...</span>
   </div>
 </div>
-<div id="map"></div>
-<div id="mapLegend"></div>
+<div id="map-container">
+  <div id="map"></div>
+  <div id="mapLegend"></div>
+</div>
 <div id="regionSelectDiv"></div>
 `
 

@@ -20,9 +20,15 @@ a {
   color: $link-color;
 }
 
-#map {
+#map-container {
+  position: relative;
   width: 100%;
   height: $map-height;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
 }
 
 #spinner {
@@ -65,7 +71,7 @@ a {
 }
 
 .map-legend-row:not(:last-child) {
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.6rem;
 }
 
 .map-legend-row {
@@ -76,6 +82,7 @@ a {
   gap: 1rem;
   margin-bottom: 0.75rem;
   flex-wrap: wrap;
+  padding: 0.25rem 0.5rem;
   
   .map-legend-icon {
     margin: 0;
@@ -89,14 +96,42 @@ a {
   cursor: pointer;
   flex-shrink: 0;
   align-self: center;
-}
+  appearance: none;
+  -webkit-appearance: none;
+  border: 2px solid var(--legend-item-color, #666);
+  border-radius: 3px;
+  background-color: #fff;
+  display: grid;
+  place-content: center;
+  position: relative;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 
-.map-legend-color {
-  width: 1rem;
-  height: 1rem;
-  margin: 0;
-  border-radius: 100%;
-  flex-shrink: 0;
+  &::after {
+    content: '';
+    position: absolute;
+    width: 0.3rem;
+    height: 0.55rem;
+    border-right: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -58%) rotate(45deg) scale(0);
+    transition: transform 0.1s ease-in-out;
+  }
+
+  &:checked {
+    background-color: var(--legend-item-color, #666);
+    border-color: var(--legend-item-color, #666);
+
+    &::after {
+      transform: translate(-50%, -58%) rotate(45deg) scale(1);
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(0, 0, 0, 0.45);
+    outline-offset: 2px;
+  }
 }
 
 .map-legend-content {
@@ -107,7 +142,7 @@ a {
   transition: background-color 0.2s ease;
   align-items: center;
   gap: 0.5rem;
-  line-height: 1.2;
+  line-height: 1.05;
   
   &:hover {
     background-color: rgba(0, 0, 0, 0.05);
