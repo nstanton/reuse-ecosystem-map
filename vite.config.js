@@ -19,10 +19,10 @@ export default defineConfig({
       }
     }
   },
+  test: {},
   base: '', // For GitHub Pages deployment with relative paths
   server: {
     port: 3000,
     open: true
   }
 })
-

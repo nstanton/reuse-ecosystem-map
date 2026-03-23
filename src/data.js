@@ -6,12 +6,13 @@ import * as Table from './table.js'
 import {
   BASE_TABLE_CONFIG,
   COLORS_TABLE_CONFIG,
-  ROLE_COL,
-  SECONDARY_ROLE_COL,
   C_ROLE_COL,
   C_COLOR_COL,
-  C_RECORD_ID_COL,
 } from './data_constants.js'
+import {
+  buildRoleLookup,
+  transformMainData,
+} from './data_helpers.js'
 
 const databaseId = import.meta.env.VITE_AIRTABLE_BASE_ID;
 const airtableApiKey = import.meta.env.VITE_AIRTABLE_API_KEY;
@@ -89,13 +90,7 @@ const getAirtableData = async () => {
   let colorsData = await getAirtableRecords(COLORS_TABLE_CONFIG)
   const roleLookup = buildRoleLookup(colorsData)
 
-  // join main data to colors to find role names
-  mainData = mainData.map(d => {
-    const obj = {...d}
-    obj[ROLE_COL] = (obj[ROLE_COL] || []).map(r => roleLookup.get(r))
-    obj[SECONDARY_ROLE_COL] = (obj[SECONDARY_ROLE_COL] || []).map(r => roleLookup.get(r))
-    return obj
-  })
+  mainData = transformMainData(mainData, roleLookup)
 
   colorsData = colorsData.map(d => [d[C_ROLE_COL], d[C_COLOR_COL]])
   return [mainData, colorsData]
@@ -107,16 +102,6 @@ const getColorsData = async () => {
   const colorsLookup = colorsData // Keep full data for lookups
   const colorsForLegend = colorsData.map(d => [d[C_ROLE_COL], d[C_COLOR_COL]])
   return { colorsLookup, colorsForLegend }
-};
-
-// Helper to transform a page of main data with colors lookup
-const transformMainData = (pageData, roleLookup) => {
-  return pageData.map(d => {
-    const obj = {...d}
-    obj[ROLE_COL] = (obj[ROLE_COL] || []).map(r => roleLookup.get(r))
-    obj[SECONDARY_ROLE_COL] = (obj[SECONDARY_ROLE_COL] || []).map(r => roleLookup.get(r))
-    return obj
-  })
 };
 
 // Stream main data page by page, calling onPage callback for each batch
@@ -150,14 +135,6 @@ const getAirtableDataStreaming = async (colorsLookup, onPage) => {
       );
   });
 };
-
-const buildRoleLookup = (colorsData) => {
-  const roleLookup = new globalThis.Map()
-  colorsData.forEach(color => {
-    roleLookup.set(color?.[C_RECORD_ID_COL], color?.[C_ROLE_COL])
-  })
-  return roleLookup
-}
 
 function getSpreadsheetData() {
   Papa.parse(publicSpreadsheetUrl, {

@@ -2,9 +2,14 @@
 
 ## Setup
 
-1. Make sure you have Node.js 22.x installed (use nvm if needed):
+1. Use the project-local Node version with `nvm`:
    ```bash
    nvm use
+   ```
+
+   If `nvm` reports the version is missing, install it once with:
+   ```bash
+   nvm install
    ```
 
 2. Install dependencies:
