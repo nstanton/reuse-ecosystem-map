@@ -2,8 +2,6 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
 import {
-  LON_COL,
-  LAT_COL,
   ENTITY_COL,
   LOCATION_COL,
   ROLE_COL,
@@ -15,6 +13,11 @@ import {
   COLLABORATION_COL,
   COLOR_COL,
 } from './data_constants.js'
+import {
+  buildGeoJSON,
+  getFeatureColor,
+  normalizeRoles,
+} from './map_helpers.js'
 
 const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
 const MAPBOX_STYLE_ID = import.meta.env.VITE_MAPBOX_STYLE_ID;
@@ -246,59 +249,6 @@ function bindPopupAndTooltipOnDemand(feature, layer) {
   })
 }
 
-function getFeatureColor(colorCol) {
-  const fallbackColor = '#333'
-  if (!colorCol || !colorCol.length) { return fallbackColor }
-  return colorCol[0]
-}
-
-function buildFeature(feature) {
-  let featureObject = {
-    "type": "Feature",
-    "properties": feature,
-    "geometry": {
-      "type": "Point",
-      "coordinates": []
-    }
-  }
-  // for (let variable in feature) {
-  //   if (feature.hasOwnProperty(variable)) {
-  //     featureObject.properties[variable.trim()] = feature[variable].trim()
-  //   }
-  // }
-  featureObject.geometry.coordinates.push(parseFloat(feature[LON_COL]))
-  featureObject.geometry.coordinates.push(parseFloat(feature[LAT_COL]))
-  return featureObject
-}
-
-function buildGeoJSON(data) {
-  let featureCollection = {
-    "type": "FeatureCollection",
-    "features": []
-  }
-  for (var i = 0; i < data.length; i++) {
-    let feature = data[i]
-    if (!feature[LON_COL] || !feature[LAT_COL]) { continue }
-    feature[LON_COL] = feature[LON_COL].replace(',', '.')
-    feature[LAT_COL] = feature[LAT_COL].replace(',', '.')
-    let lon = feature[LON_COL]
-    let lat = feature[LAT_COL]
-    if (lon.match(/[a-z]/i) && lat.match(/[a-z]/i)) {
-      feature[LON_COL] = parseDMS(feature[LON_COL])
-      feature[LAT_COL] = parseDMS(feature[LAT_COL])
-    }
-    try {
-      if (isNaN(parseFloat(lon)) == false && isNaN(parseFloat(lat)) == false) {
-        let built = buildFeature(feature)
-        featureCollection['features'].push(built)
-      }
-    } catch (e) {
-        console.log('error parsing row', i, feature, e)
-    }
-  }
-  return featureCollection
-}
-
 function loadMap(geoJSON) {
   map = L.map('map', {
     center: INITIAL_COORDS,
@@ -362,21 +312,6 @@ function zoomToRegion(regionName) {
   // if (filteredData) {
   //   map.fitBounds(L.geoJSON(filteredData).getBounds())
   // }
-}
-
-// https://stackoverflow.com/questions/1140189/converting-latitude-and-longitude-to-decimal-values
-function parseDMS(input) {
-    let parts = input.split(/[^\d\w\.]+/)
-    return convertDMSToDD(parts[0], parts[1], parts[2], parts[3])
-}
-
-function convertDMSToDD(degrees, minutes, seconds, direction) {
-    let dd = parseInt(degrees) + parseInt(minutes)/60 + parseInt(seconds)/(60*60)
-
-    if (direction == "S" || direction == "W") {
-        dd = dd * -1
-    }
-    return dd
 }
 
 function mapLegend(colors) {
@@ -463,12 +398,6 @@ function filterMarkersByCategories(selectedCategories) {
   })
 
   activeCategories = selectedSet
-}
-
-function normalizeRoles(roles) {
-  if (Array.isArray(roles)) return roles.filter(Boolean)
-  if (roles) return [roles]
-  return []
 }
 
 function registerMarkerForCategories(marker, roles) {
