@@ -1,7 +1,6 @@
 import Papa from 'papaparse'
 import Airtable from "airtable"
 import * as MapModule from './map.js'
-import * as Table from './table.js'
 
 import {
   BASE_TABLE_CONFIG,
@@ -148,7 +147,6 @@ function getSpreadsheetData() {
         }
       })
       MapModule.init(publishedData)
-      Table.init(publishedData, '#table')
     }
   })
 }
