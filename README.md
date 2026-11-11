@@ -40,9 +40,7 @@ npm run preview
 
 ## Deploy
 
-### Automatic Deployment (Recommended)
-
-The project uses GitHub Actions to automatically deploy to GitHub Pages on every push to `main`. 
+The project uses GitHub Actions to automatically deploy to GitHub Pages on every push to `main`.
 
 **Setup Steps:**
 1. Go to your repository Settings → Secrets and variables → Actions
@@ -55,11 +53,4 @@ The project uses GitHub Actions to automatically deploy to GitHub Pages on every
 4. Under "Source", select "GitHub Actions"
 5. Push to `main` branch to trigger deployment
 
-### Manual Deployment
-
-Deploy to GitHub Pages manually:
-```bash
-npm run deploy
-```
-
-Note: Manual deployment requires environment variables to be set in your local environment.
+Pull requests run `npm ci`, `npm test`, and `npm run build` via the CI workflow before merge. Dependabot opens weekly grouped update PRs for npm packages and GitHub Actions.
