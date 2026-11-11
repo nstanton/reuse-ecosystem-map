@@ -9,7 +9,6 @@
     "clean": "rm -rf dist",
     "start": "vite",
     "preview": "vite preview",
-    "deploy": "vite build && node deploy.js",
     "test": "vitest run"
   },
   "dependencies": {
@@ -18,8 +17,6 @@
     "papaparse": "^5.5.3"
   },
   "devDependencies": {
-    "csvtojson": "^2.0.14",
-    "gh-pages": "^6.3.0",
     "sass": "^1.108.2",
     "vite": "^8.3.8",
     "vitest": "^5.1.0"
